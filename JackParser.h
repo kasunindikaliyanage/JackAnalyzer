@@ -1,14 +1,19 @@
 #pragma once
 
+#include "JackTokenizer.h"
 
 class JackParser {
+	
+	JackTokenizer* tokenizer = nullptr;
 
 public:
-	JackParser( char* fileName);
+	JackParser( const char* fileName);
+
+	~JackParser();
 
 	void compileClass();
 
-	void compilerClassVarDec();
+	void compileClassVarDec();
 
 	void compileSubroutineDec();
 
@@ -35,4 +40,6 @@ public:
 	void compileExpression();
 
 	void compileTerm();
+
+	void compileType();
 };

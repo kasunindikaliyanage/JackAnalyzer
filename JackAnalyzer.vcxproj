@@ -144,6 +144,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="JackAnalyzer.cpp" />
+    <ClCompile Include="JackParser.cpp" />
     <ClCompile Include="JackTokenizer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
