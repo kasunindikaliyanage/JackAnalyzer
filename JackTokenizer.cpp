@@ -34,7 +34,7 @@ void JackTokenizer::advance()
 
     while (!input_stream.eof())
     {
-        if ( c == ' ')
+        if ( c == ' ' || c == '\t')
         {
             c = input_stream.get();
             continue;
@@ -84,11 +84,11 @@ void JackTokenizer::advance()
         currenct_token_type = TokenTypes::SYMBOL;
         parsed_str = c;
     }
-    else if ( c == '"')
+    else if ( c == '\"')
     {
         parsed_str.erase(parsed_str.begin(), parsed_str.end());
-        
-        while (c != '"')
+        c = input_stream.get();
+        while (c != '\"')
         {
             parsed_str.append(1,c);
             c = input_stream.get();

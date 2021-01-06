@@ -1,10 +1,13 @@
 #pragma once
 
+#include <fstream>
+
 #include "JackTokenizer.h"
 
 class JackParser {
 	
 	JackTokenizer* tokenizer = nullptr;
+	std::ofstream* out_file;
 
 public:
 	JackParser( const char* fileName);
@@ -40,6 +43,4 @@ public:
 	void compileExpression();
 
 	void compileTerm();
-
-	void compileType();
 };
