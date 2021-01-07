@@ -2,24 +2,28 @@
 
 //TODO add const char for all the characters
 
-static void getNextToken(JackTokenizer* _tokenizer)
-{
-	if (_tokenizer->hasMoreTokens())
-	{
-		_tokenizer->advance();
-		return;
-	}
-
-	std::cout << "No more tokens \n";
-	EXIT_FAILURE;
-}
-
-
 static std::string remove_extension(std::string file_name_with_extension)
 {
 	size_t lastindex = file_name_with_extension.find_last_of(".");
 	std::string rawname = file_name_with_extension.substr(0, lastindex);
 	return rawname;
+}
+
+
+Token* JackParser::getNextToken()
+{
+	Token* ret_ptr = nullptr;
+	if (!tokens_stack.empty())
+	{
+		ret_ptr = tokens_stack.top();
+		tokens_stack.pop();
+	}
+	else if (tokenizer->hasMoreTokens())
+	{
+		ret_ptr = tokenizer->advance();
+	}
+
+	return ret_ptr;
 }
 
 JackParser::JackParser(const char* fileName)
@@ -31,6 +35,7 @@ JackParser::JackParser(const char* fileName)
 	out_file = new std::ofstream (out_name,std::ios::out);
 }
 
+
 JackParser::~JackParser()
 {
 	delete tokenizer;
@@ -39,58 +44,60 @@ JackParser::~JackParser()
 
 void JackParser::compileClass()
 {
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::KEYWORD && tokenizer->keyWord() != KeyWords::CLASS)
+	current_token = getNextToken();
+	if (current_token->keyword != KeyWords::CLASS)
 	{
 		std::printf("Unexpected class definition. class keyword expected \n");
 	}
 
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::IDENTIFIER)
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::IDENTIFIER)
 	{
 		std::printf("Unexpected class definition. class name expected \n");
 	}
 
-	//*out_file << "<class>" << std::endl;
-
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '{')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
 	{
 		std::printf("Unexpected class definition. { expected \n");
 	}
 
-	getNextToken(tokenizer);
-
 	while (true)
 	{
-		if (tokenizer->tokenType() != TokenTypes::KEYWORD
-			|| (tokenizer->keyWord() != KeyWords::STATIC && tokenizer->keyWord() != KeyWords::FIELD))
+		current_token = getNextToken();
+		if (current_token->keyword == KeyWords::STATIC || current_token->keyword == KeyWords::FIELD)
 		{
-			break;
+			//Peek the token
+			tokens_stack.push(current_token);
+			compileClassVarDec();
+			continue;
 		}
 
-		//line start with "static" or "field"
-		compileClassVarDec();
+		tokens_stack.push(current_token);
+		break;
 	}
 
 	while (true)
 	{
-		if ( tokenizer->tokenType() != TokenTypes::KEYWORD
-			|| ( tokenizer->keyWord() != KeyWords::CONSTRUCTOR && tokenizer->keyWord() != KeyWords::FUNCTION && tokenizer->keyWord() != KeyWords::METHOD ) )
+		current_token = getNextToken();
+		if (current_token->keyword == KeyWords::CONSTRUCTOR || current_token->keyword == KeyWords::FUNCTION 
+			|| current_token->keyword == KeyWords::METHOD)
 		{
-			break;
+			//Peek the token
+			tokens_stack.push(current_token);
+			compileSubroutineDec();
+			continue;
 		}
-		compileSubroutineDec();
-		//getNextToken(tokenizer);
+		tokens_stack.push(current_token);
+		break;
 	}
 
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != '}')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL || current_token->str != "}")
 	{
 		std::printf("Unexpected class definition. } expected \n");
 		return;
 	}
-
-	//*out_file << "</class>";
 
 	std::printf("Compilation Success \n");
 }
@@ -98,35 +105,53 @@ void JackParser::compileClass()
 
 void JackParser::compileClassVarDec()
 {
-	getNextToken(tokenizer);
-	if ( !((tokenizer->tokenType() == TokenTypes::KEYWORD 
-				&& ((tokenizer->keyWord() == KeyWords::BOOLEAN) || (tokenizer->keyWord() == KeyWords::INT) || (tokenizer->keyWord() == KeyWords::CHAR)))
-			||(tokenizer->tokenType() == TokenTypes::IDENTIFIER)))
+	current_token = getNextToken();
+	if (current_token->keyword == KeyWords::CONSTRUCTOR || current_token->keyword == KeyWords::FUNCTION
+		|| current_token->keyword == KeyWords::METHOD)
 	{
-		std::printf("Unexpected class var declaration. Type expected \n");
+		// we have already peeked at this condition and that's why we are here. 
+		// therefore no need for this condition check.
+		// but for the sake of completion and localization I have put it here.
+		tokens_stack.push(current_token);
+	}
+	
+	
+	current_token = getNextToken();
+
+	// if the token is for keyword then it has to be type one (boolean | char | int)
+	// or it can be identifier which has to be already declared
+	if ( !((current_token->type == TokenTypes::KEYWORD
+				&& ((current_token->keyword == KeyWords::BOOLEAN)
+					|| (current_token->keyword == KeyWords::INT) || (current_token->keyword == KeyWords::CHAR)))
+			||(current_token->type == TokenTypes::IDENTIFIER)))
+	{
+		std::printf("Unexpected class var declaration. Type expected %d\n",tokenizer->lineNumber());
 		return;
 	}
 
-	getNextToken(tokenizer);
+	current_token = getNextToken();
 	while (true)
 	{
-		if (tokenizer->tokenType() != TokenTypes::IDENTIFIER)
+		if (current_token->type != TokenTypes::IDENTIFIER)
 		{
-			std::printf("Unexpected class var declaration. Identifier expected \n");
+			std::printf("Unexpected class var declaration. Identifier expected %d\n", tokenizer->lineNumber());
 			return;
 		}
 
-		getNextToken(tokenizer);
-		if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ',')
+		current_token = getNextToken();
+		if (current_token->str != ",")
 		{
+			// no need to push as next expected token is ; and error handling is done below.
+			//tokens_stack.push(current_token);
 			break;
 		}
 	}
 
 	// Match ';' at the end of var definitions
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ';')
+	if (current_token->type != TokenTypes::SYMBOL || current_token->str != ";")
 	{
-		std::printf("Unexpected class var declaration. Should end with ; \n");
+		tokens_stack.push(current_token);
+		std::printf("Unexpected class var declaration. Should end with ; %d\n",tokenizer->lineNumber());
 		return;
 	}
 }
@@ -134,24 +159,50 @@ void JackParser::compileClassVarDec()
 
 void JackParser::compileSubroutineDec()
 {
-	// function return type check
-	getNextToken(tokenizer);
-	if ( !(((tokenizer->tokenType() == TokenTypes::KEYWORD) && (tokenizer->keyWord() == KeyWords::VOID))
-		    ||(tokenizer->tokenType() == TokenTypes::IDENTIFIER)) )
+	current_token = getNextToken();
+	if (current_token->keyword == KeyWords::CONSTRUCTOR || current_token->keyword == KeyWords::FUNCTION
+		|| current_token->keyword == KeyWords::METHOD)
 	{
-		std::printf("Unexpected function declaration. Type expected \n");
-		return;
+		// this condition is obselete as we have checked it from out side
+	}
+
+	// function return type check
+	current_token = getNextToken();
+	if ( !(((current_token->type == TokenTypes::KEYWORD) && (current_token->keyword == KeyWords::VOID))
+		    ||(current_token->type == TokenTypes::IDENTIFIER)) )
+	{
+		// we have already peeked at this condition and that's why we are here. 
+		// therefore no need for this condition check.
+		// but for the sake of completion and localization I have put it here.
 	}
 
 	//function name check
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::IDENTIFIER)
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::IDENTIFIER)
 	{
-		std::printf("Unexpected function declaration. Function name expected \n");
+		std::printf("Unexpected function declaration. Function name expected %d\n",tokenizer->lineNumber());
+		tokens_stack.push(current_token);
+	}
+
+	//function parameter list start
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "(")
+	{
+		std::printf("Unexpected function declaration. '(' expected at %d\n", tokenizer->lineNumber());
+		tokens_stack.push(current_token);
 		return;
 	}
 
 	compileParameterList();
+
+	current_token = getNextToken();
+	//function parameter list start
+	if (current_token->type != TokenTypes::SYMBOL || current_token->str != ")")
+	{
+		std::printf("Unexpected function declaration. ')' expected at %d\n", tokenizer->lineNumber());
+		tokens_stack.push(current_token);
+		return;
+	}
 
 	compileSubroutineBody();
 }
@@ -159,44 +210,33 @@ void JackParser::compileSubroutineDec()
 
 void JackParser::compileParameterList()
 {
-	//function parameter list start
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '(')
-	{
-		std::printf("Unexpected function declaration. '(' expected \n");
-		return;
-	}
-
 	//function parameter list check
-	getNextToken(tokenizer);
 	while (true)
 	{
-		if (tokenizer->tokenType() != TokenTypes::KEYWORD
-			&& ((tokenizer->keyWord() != KeyWords::BOOLEAN) && (tokenizer->keyWord() != KeyWords::INT) && (tokenizer->keyWord() != KeyWords::CHAR))
-			&& tokenizer->tokenType() != TokenTypes::IDENTIFIER)
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::KEYWORD
+			&& ((current_token->keyword != KeyWords::BOOLEAN) && (current_token->keyword != KeyWords::INT)
+				&& (current_token->keyword != KeyWords::CHAR))
+			&& current_token->type != TokenTypes::IDENTIFIER)
 		{
+			tokens_stack.push(current_token);
 			break;
 		}
 
-		getNextToken(tokenizer);
-		if (tokenizer->tokenType() != TokenTypes::IDENTIFIER)
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::IDENTIFIER)
 		{
-			std::printf("Unexpected parameter declaration. Identifier expected \n");
+			std::printf("Unexpected parameter declaration. Identifier expected at %d\n", tokenizer->lineNumber());
+			tokens_stack.push(current_token);
 			return;
 		}
 
-		getNextToken(tokenizer);
-		if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ',')
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::SYMBOL || current_token->str != ",")
 		{
+			tokens_stack.push(current_token);
 			break;
 		}
-	}
-
-	//function parameter list start
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ')')
-	{
-		std::printf("Unexpected function declaration. ')' expected \n");
-		return;
 	}
 }
 
@@ -204,38 +244,36 @@ void JackParser::compileParameterList()
 void JackParser::compileSubroutineBody()
 {
 	//function body start
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '{')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
 	{
-		std::printf("Unexpected function body open. '{' expected \n");
+		std::printf("Unexpected function body open. '{' expected at %d\n",tokenizer->lineNumber());
+		tokens_stack.push(current_token);
 		return;
 	}
 
-	//var declaration
-	getNextToken(tokenizer);
-
 	while (true)
 	{
-		if (tokenizer->tokenType() != TokenTypes::KEYWORD
-			|| (tokenizer->keyWord() != KeyWords::VAR))
+		current_token = getNextToken();
+
+		if (current_token->type != TokenTypes::KEYWORD
+			|| (current_token->keyword != KeyWords::VAR))
 		{
+			tokens_stack.push(current_token);
 			break;
 		}
 
 		//line start with "static" or "field"
 		compileVarDec();
-		getNextToken(tokenizer);
 	}
 
 	// statements
 	compileStatements();
 
-
-	//function body end
-	//getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '}')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "}")
 	{
-		std::printf("Unexpected function body close. '}' expected \n");
+		std::printf("Unexpected function body close. '}' expected. %d \n", tokenizer->lineNumber());
 		return;
 	}
 }
@@ -244,36 +282,41 @@ void JackParser::compileSubroutineBody()
 void JackParser::compileVarDec()
 {
 	//TODO this code is similar to the code for the class variable parsing. Try to remove it
-	getNextToken(tokenizer);
-	if (!((tokenizer->tokenType() == TokenTypes::KEYWORD
-		&& ((tokenizer->keyWord() == KeyWords::BOOLEAN) || (tokenizer->keyWord() == KeyWords::INT) || (tokenizer->keyWord() == KeyWords::CHAR)))
-		|| (tokenizer->tokenType() == TokenTypes::IDENTIFIER)))
+	current_token = getNextToken();
+	if (!((current_token->type == TokenTypes::KEYWORD
+		&& ((current_token->keyword == KeyWords::BOOLEAN) || (current_token->keyword == KeyWords::INT)
+			|| (current_token->keyword == KeyWords::CHAR)))
+		|| (current_token->type == TokenTypes::IDENTIFIER)))
 	{
-		std::printf("Unexpected var declaration. Type expected \n");
+		std::printf("Unexpected var declaration. Type expected at %d.\n", tokenizer->lineNumber());
+		tokens_stack.push(current_token);
 		return;
 	}
 
-	getNextToken(tokenizer);
 	while (true)
 	{
-		if (tokenizer->tokenType() != TokenTypes::IDENTIFIER)
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::IDENTIFIER)
 		{
-			std::printf("Unexpected var declaration. Identifier expected \n");
+			std::printf("Unexpected var declaration. Identifier expected at %d. \n", tokenizer->lineNumber());
+			tokens_stack.push(current_token);
 			return;
 		}
 
-		getNextToken(tokenizer);
-		if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ',')
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::SYMBOL || current_token->str != ",")
 		{
+			tokens_stack.push(current_token);
 			break;
 		}
-		getNextToken(tokenizer);
 	}
 
+	current_token = getNextToken();
 	// Match ';' at the end of var definitions
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ';')
+	if (current_token->type != TokenTypes::SYMBOL || current_token->str != ";")
 	{
-		std::printf("Unexpected var declaration. Should end with ; \n");
+		std::printf("Unexpected var declaration. Should end with ; at %d.\n", tokenizer->lineNumber());
+		tokens_stack.push(current_token);
 		return;
 	}
 }
@@ -283,37 +326,43 @@ void JackParser::compileStatements()
 {
 	while (true)
 	{
-		if (tokenizer->tokenType() == TokenTypes::KEYWORD)
+		current_token = getNextToken();
+		if (current_token->type == TokenTypes::KEYWORD)
 		{
-			if (tokenizer->keyWord() == KeyWords::WHILE)
+			tokens_stack.push(current_token);
+			if (current_token->keyword == KeyWords::WHILE)
 			{
 				compileWhile();
 			}
-			else if (tokenizer->keyWord() == KeyWords::IF)
+			else if (current_token->keyword == KeyWords::IF)
 			{
 				compileIf();
 			}
-			else if (tokenizer->keyWord() == KeyWords::LET)
+			else if (current_token->keyword == KeyWords::LET)
 			{
 				compileLet();
 			}
-			else if (tokenizer->keyWord() == KeyWords::RETURN)
+			else if (current_token->keyword == KeyWords::RETURN)
 			{
 				compileReturn();
 
-				if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ';')
+				current_token = getNextToken();
+				if (current_token->type != TokenTypes::SYMBOL || current_token->str != ";")
 				{
-					std::printf("Unexpected ending for var declaration. ';' expected \n");
+					tokens_stack.push(current_token);
+					std::printf("Unexpected ending for var declaration. ';' expected at %d.\n", tokenizer->lineNumber());
 					return;
 				}
 			}
-			else if (tokenizer->keyWord() == KeyWords::DO)
+			else if (current_token->keyword == KeyWords::DO)
 			{
 				compileDo();
-
-				if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ';')
+				
+				current_token = getNextToken();				
+				if (current_token->type != TokenTypes::SYMBOL || current_token->str != ";")
 				{
-					std::printf("Unexpected ending for var declaration. ';' expected \n");
+					tokens_stack.push(current_token);
+					std::printf("Unexpected ending for var declaration. ';' expected at %d.\n", tokenizer->lineNumber());
 					return;
 				}
 			}
@@ -321,42 +370,50 @@ void JackParser::compileStatements()
 			{
 				break;
 			}
-
-			getNextToken(tokenizer);
 		}
 		else
 		{
+			tokens_stack.push(current_token);
 			break;
 		}
 	}
-
-
 }
 
 
 void JackParser::compileLet()
 {
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::IDENTIFIER)
+	current_token = getNextToken();
+	if (current_token->keyword != KeyWords::LET)
+	{
+		// this condition is obselete as we have checked it from out side
+	}
+
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::IDENTIFIER)
 	{
 		std::printf("Unexpected 'let' syntax. var name expected \n");
 		return;
 	}
 
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() == '[')
+	current_token = getNextToken();
+	if (current_token->type == TokenTypes::SYMBOL && current_token->str == "[")
 	{
 		compileExpression();
 
-		if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != ']')
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::SYMBOL && current_token->str != "]")
 		{
 			std::printf("Unexpected var array declaration. ']' expected \n");
 			return;
 		}
-		getNextToken(tokenizer);
+	}
+	else
+	{
+		tokens_stack.push(current_token);
 	}
 
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '=')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "=")
 	{
 		std::printf("Unexpected assignment to var. '=' expected \n");
 		return;
@@ -364,20 +421,25 @@ void JackParser::compileLet()
 
 	compileExpression();
 
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ';')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL || current_token->str != ";")
 	{
 		std::printf("Unexpected ending for var declaration. ';' expected \n");
 		return;
 	}
-
-	//getNextToken(tokenizer);
 }
 
 
 void JackParser::compileIf()
 {
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '(')
+	current_token = getNextToken();
+	if (current_token->keyword != KeyWords::IF)
+	{
+		// this condition is obselete as we have checked it from out side
+	}
+
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "(")
 	{
 		std::printf("Unexpected opening to while. '(' expected \n");
 		return;
@@ -385,15 +447,15 @@ void JackParser::compileIf()
 
 	compileExpression();
 
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != ')')
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
 	{
 		std::printf("Unexpected end to while. ')' expected \n");
 		return;
 	}
 
 	// parsing body of the if condition
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '{')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
 	{
 		std::printf("Unexpected opening to while body. '{' expected \n");
 		return;
@@ -401,7 +463,7 @@ void JackParser::compileIf()
 
 	compileStatements();
 
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '}')
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "}")
 	{
 		std::printf("Unexpected end to while body. '}' expected \n");
 		return;
@@ -433,8 +495,14 @@ void JackParser::compileIf()
 
 void JackParser::compileWhile()
 {
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '(')
+	current_token = getNextToken();
+	if (current_token->keyword != KeyWords::WHILE)
+	{
+		// this condition is obselete as we have checked it from out side
+	}
+
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "(")
 	{
 		std::printf("Unexpected opening to while. '(' expected \n");
 		return;
@@ -442,24 +510,25 @@ void JackParser::compileWhile()
 
 	compileExpression();
 
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != ')')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
 	{
 		std::printf("Unexpected end to while. ')' expected \n");
 		return;
 	}
 
 	// parsing body of the while loop
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '{')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
 	{
 		std::printf("Unexpected opening to while body. '{' expected \n");
 		return;
 	}
 
-	getNextToken(tokenizer);
 	compileStatements();
 
-	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '}')
+	current_token = getNextToken();
+	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "}")
 	{
 		std::printf("Unexpected end to while body. '}' expected \n");
 		return;
@@ -469,46 +538,52 @@ void JackParser::compileWhile()
 
 void JackParser::compileDo()
 {
-	getNextToken(tokenizer);
-	if (tokenizer->tokenType() == TokenTypes::IDENTIFIER)
+	current_token = getNextToken();
+	if (current_token->keyword != KeyWords::DO)
 	{
-		getNextToken(tokenizer);
-		if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() == '(')
+		// this condition is obselete as we have checked it from out side
+	}
+
+	current_token = getNextToken();
+	if (current_token->type == TokenTypes::IDENTIFIER)
+	{
+		current_token = getNextToken();
+		if (current_token->type == TokenTypes::SYMBOL && current_token->str == "(")
 		{
 			compileExpressionList();
 
-			if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != ')')
+			if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
 			{
-				std::printf("Unexpected end to expression list. ')' expected \n");
+				std::printf("Unexpected end to expression list. ')' expected at %d.\n", tokenizer->lineNumber());
 				return;
 			}
 		}
-		else if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() == '.')
+		else if (current_token->type == TokenTypes::SYMBOL && current_token->str == ".")
 		{
-			getNextToken(tokenizer);
-			if (tokenizer->tokenType() == TokenTypes::IDENTIFIER)
+			current_token = getNextToken();
+			if (current_token->type == TokenTypes::IDENTIFIER)
 			{
-				getNextToken(tokenizer);
-				if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() == '(')
+				current_token = getNextToken();
+				if (current_token->type == TokenTypes::SYMBOL && current_token->str == "(")
 				{
 					compileExpressionList();
 
-					if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() != ')')
+					current_token = getNextToken();
+					if (current_token->type == TokenTypes::SYMBOL && current_token->str != ")")
 					{
-						std::printf("Unexpected end to expression list. ')' expected \n");
+						std::printf("Unexpected end to expression list. ')' expected at %d.\n", tokenizer->lineNumber());
 						return;
 					}
-					getNextToken(tokenizer);
 				}
 				else
 				{
-					std::printf("Unexpected syntax for subroutine call. '(' expected \n");
+					std::printf("Unexpected syntax for subroutine call. '(' expected at %d.\n", tokenizer->lineNumber());
 					return;
 				}
 			}
 			else
 			{
-				std::printf("Unexpected syntax for subroutine call. 'subroutine name' expected \n");
+				std::printf("Unexpected syntax for subroutine call. 'subroutine name' expected at %d.\n", tokenizer->lineNumber());
 				return;
 			}
 		}
@@ -532,9 +607,10 @@ void JackParser::compileExpressionList()
 	{
 		compileExpression();
 
-		//getNextToken(tokenizer);
-		if (tokenizer->tokenType() != TokenTypes::SYMBOL || tokenizer->symbol() != ',')
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::SYMBOL || current_token->str != ",")
 		{
+			tokens_stack.push(current_token);
 			break;
 		}
 	}
@@ -545,112 +621,117 @@ void JackParser::compileExpression()
 {
 	compileTerm();
 
-	//getNextToken(tokenizer);
-
 	while (true)
 	{
-		if (tokenizer->tokenType() == TokenTypes::SYMBOL
-			&& (tokenizer->symbol()    == '+'
-				|| tokenizer->symbol() == '-'
-				|| tokenizer->symbol() == '*'
-				|| tokenizer->symbol() == '/'
-				|| tokenizer->symbol() == '&'
-				|| tokenizer->symbol() == '|'
-				|| tokenizer->symbol() == '>'
-				|| tokenizer->symbol() == '<'
-				|| tokenizer->symbol() == '='))
+		current_token = getNextToken();
+		if (current_token->type == TokenTypes::SYMBOL
+			&& (current_token->str == "+"
+				|| current_token->str == "-"
+				|| current_token->str == "*"
+				|| current_token->str == "/"
+				|| current_token->str == "&"
+				|| current_token->str == "|"
+				|| current_token->str == ">"
+				|| current_token->str == "<"
+				|| current_token->str == "="))
 		{
 			compileTerm();
 		}
 		else
 		{
+			tokens_stack.push(current_token);
 			break;
 		}
 	}
-
 }
 
 
 void JackParser::compileTerm()
 {
-	getNextToken(tokenizer);
-	if (	tokenizer->tokenType() == TokenTypes::INT_CONST
-		||  tokenizer->tokenType() == TokenTypes::STRING_CONST
-		|| (tokenizer->tokenType() == TokenTypes::KEYWORD 
-				&& (	tokenizer->keyWord() == KeyWords::TRUE
-					|| tokenizer->keyWord() == KeyWords::FALSE
-					|| tokenizer->keyWord() == KeyWords::NULLX
-					|| tokenizer->keyWord() == KeyWords::THIS)))
+	current_token = getNextToken();
+	if (current_token->type == TokenTypes::INT_CONST
+		|| current_token->type == TokenTypes::STRING_CONST
+		|| (current_token->type == TokenTypes::KEYWORD
+				&& (current_token->keyword == KeyWords::TRUE
+					|| current_token->keyword == KeyWords::FALSE
+					|| current_token->keyword == KeyWords::NULLX
+					|| current_token->keyword == KeyWords::THIS)))
 	{
-		getNextToken(tokenizer);
+		
 	}
-	else if (tokenizer->tokenType() == TokenTypes::IDENTIFIER)
+	else if (current_token->type == TokenTypes::IDENTIFIER)
 	{
-		getNextToken(tokenizer);
-		if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() == '[')
+		current_token = getNextToken();
+		if (current_token->type == TokenTypes::SYMBOL && current_token->str == "[")
 		{
 			compileExpression();
 
-			if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != ']')
+			current_token = getNextToken();
+			if (current_token->type != TokenTypes::SYMBOL && current_token->str != "]")
 			{
-				std::printf("Unexpected end to term. ']' expected \n");
+				std::printf("Unexpected end to term. ']' expected at %d.\n", tokenizer->lineNumber());
 				return;
 			}
-			getNextToken(tokenizer);
 		}
 		// Handling subroutine calls
-		else if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() == '(')
+		else if (current_token->type == TokenTypes::SYMBOL && current_token->str == "(")
 		{
 			compileExpressionList();
 
-			if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != ')')
+			current_token = getNextToken();
+			if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
 			{
-				std::printf("Unexpected end to expression list. ')' expected \n");
+				std::printf("Unexpected end to expression list. ')' expected at %d.\n", tokenizer->lineNumber());
 				return;
 			}
 		}
-		else if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() == '.')
+		else if (current_token->type == TokenTypes::SYMBOL && current_token->str == ".")
 		{
-			getNextToken(tokenizer);
-			if (tokenizer->tokenType() == TokenTypes::IDENTIFIER)
+			current_token = getNextToken();
+			if (current_token->type == TokenTypes::IDENTIFIER)
 			{
-				getNextToken(tokenizer);
-				if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() == '(')
+				current_token = getNextToken();
+				if (current_token->type == TokenTypes::SYMBOL && current_token->str == "(")
 				{
 					compileExpressionList();
 
-					if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() != ')')
+					current_token = getNextToken();
+					if (current_token->type == TokenTypes::SYMBOL && current_token->str != ")")
 					{
-						std::printf("Unexpected end to expression list. ')' expected \n");
+						std::printf("Unexpected end to expression list. ')' expected at %d.\n", tokenizer->lineNumber());
 						return;
 					}
-					getNextToken(tokenizer);
 				}
 				else
 				{
-					std::printf("Unexpected syntax for subroutine call. '(' expected \n");
+					std::printf("Unexpected syntax for subroutine call. '(' expected at %d.\n", tokenizer->lineNumber());
 					return;
 				}
 			}
 			else
 			{
-				std::printf("Unexpected syntax for subroutine call. 'subroutine name' expected \n");
+				std::printf("Unexpected syntax for subroutine call. 'subroutine name' expected at %d.\n", tokenizer->lineNumber());
 				return;
 			}
 		}
+		else
+		{
+			tokens_stack.push(current_token);
+		}
 	}
-	else if (tokenizer->tokenType() == TokenTypes::SYMBOL && tokenizer->symbol() == '(')
+	else if (current_token->type == TokenTypes::SYMBOL && current_token->str == "(")
 	{
 		compileExpression();
-
-		if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != ')')
+		
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
 		{
-			std::printf("Unexpected end to expression. ')' expected \n");
+			std::printf("Unexpected end to expression. ')' expected at %d.\n", tokenizer->lineNumber());
 			return;
 		}
 	}
-	else if (tokenizer->tokenType() == TokenTypes::SYMBOL 
-		&& ( tokenizer->symbol() == '~' || tokenizer->symbol() == '-'))
+	else if (current_token->type == TokenTypes::SYMBOL
+		&& (current_token->str == "~" || current_token->str == "-"))
 	{
 		compileTerm();
 	}

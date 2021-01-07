@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <stack>
 
 #include "JackTokenizer.h"
 
@@ -8,7 +9,11 @@ class JackParser {
 	
 	JackTokenizer* tokenizer = nullptr;
 	std::ofstream* out_file;
+	std::stack<Token*> tokens_stack;
+	Token* current_token = nullptr;
 
+	Token* getNextToken();
+	
 public:
 	JackParser( const char* fileName);
 
