@@ -14,7 +14,8 @@ enum TokenTypes {
 	EOFILE
 };
 
-enum KeyWords {
+enum class KeyWords {
+	INVALID,
 	CLASS,
 	METHOD,
 	FUNCTION,
@@ -38,31 +39,50 @@ enum KeyWords {
 	THIS
 };
 
+struct Token {
+	TokenTypes type;
+	std::string str;
+	int value =  -1;
+	KeyWords keyword = KeyWords::INVALID;
+
+	Token(TokenTypes _type, std::string _str): type(_type), str(_str)
+	{}
+
+	Token(TokenTypes _type, std::string _str, int _value) : type(_type), str(_str), value(_value)
+	{}
+
+	Token(TokenTypes _type, std::string _str, KeyWords _keyword) : type(_type), str(_str), keyword(_keyword)
+	{}
+};
+
 class JackTokenizer {
 
 	int line_number = 0;
 	std::ifstream input_stream;
 
-	TokenTypes currenct_token_type = TokenTypes::INVALID;
+	//TokenTypes currenct_token_type = TokenTypes::INVALID;
 	std::string parsed_str;
-	int parsed_value = 0;
+	Token* token = nullptr;
+	//int parsed_value = 0;
 
 public:
 	JackTokenizer(const char* fileName);
 
 	bool hasMoreTokens();
 
-	void advance();
+	Token* advance();
 
-	TokenTypes tokenType();
+	//Token* tokenType();
 
-	KeyWords keyWord();
+	//KeyWords keyWord();
 
-	char symbol();
+	int lineNumber();
 
-	std::string indentifier();
+	//char symbol();
 
-	int intVal();
+	//std::string indentifier();
 
-	std::string stringVal();
+	//int intVal();
+
+	//std::string stringVal();
 };
