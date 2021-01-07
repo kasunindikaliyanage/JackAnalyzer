@@ -47,19 +47,19 @@ void JackParser::compileClass()
 	current_token = getNextToken();
 	if (current_token->keyword != KeyWords::CLASS)
 	{
-		std::printf("Unexpected class definition. class keyword expected \n");
+		std::printf("Unexpected class definition. class keyword expected at %d.\n", tokenizer->lineNumber());
 	}
 
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::IDENTIFIER)
 	{
-		std::printf("Unexpected class definition. class name expected \n");
+		std::printf("Unexpected class definition. class name expected at %d.\n", tokenizer->lineNumber());
 	}
 
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
 	{
-		std::printf("Unexpected class definition. { expected \n");
+		std::printf("Unexpected class definition. { expected at %d.\n", tokenizer->lineNumber());
 	}
 
 	while (true)
@@ -95,11 +95,11 @@ void JackParser::compileClass()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL || current_token->str != "}")
 	{
-		std::printf("Unexpected class definition. } expected \n");
+		std::printf("Unexpected class definition. } expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
-	std::printf("Compilation Success \n");
+	std::printf("Compilation Success at %d.\n", tokenizer->lineNumber());
 }
 
 
@@ -391,7 +391,7 @@ void JackParser::compileLet()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::IDENTIFIER)
 	{
-		std::printf("Unexpected 'let' syntax. var name expected \n");
+		std::printf("Unexpected 'let' syntax. var name expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
@@ -403,7 +403,7 @@ void JackParser::compileLet()
 		current_token = getNextToken();
 		if (current_token->type != TokenTypes::SYMBOL && current_token->str != "]")
 		{
-			std::printf("Unexpected var array declaration. ']' expected \n");
+			std::printf("Unexpected var array declaration. ']' expected at %d.\n", tokenizer->lineNumber());
 			return;
 		}
 	}
@@ -415,7 +415,7 @@ void JackParser::compileLet()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "=")
 	{
-		std::printf("Unexpected assignment to var. '=' expected \n");
+		std::printf("Unexpected assignment to var. '=' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
@@ -424,7 +424,7 @@ void JackParser::compileLet()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL || current_token->str != ";")
 	{
-		std::printf("Unexpected ending for var declaration. ';' expected \n");
+		std::printf("Unexpected ending for var declaration. ';' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 }
@@ -441,7 +441,7 @@ void JackParser::compileIf()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "(")
 	{
-		std::printf("Unexpected opening to while. '(' expected \n");
+		std::printf("Unexpected opening to while. '(' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
@@ -449,7 +449,7 @@ void JackParser::compileIf()
 
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
 	{
-		std::printf("Unexpected end to while. ')' expected \n");
+		std::printf("Unexpected end to while. ')' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
@@ -457,7 +457,7 @@ void JackParser::compileIf()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
 	{
-		std::printf("Unexpected opening to while body. '{' expected \n");
+		std::printf("Unexpected opening to while body. '{' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
@@ -465,31 +465,35 @@ void JackParser::compileIf()
 
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "}")
 	{
-		std::printf("Unexpected end to while body. '}' expected \n");
+		std::printf("Unexpected end to while body. '}' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
 	//TODO else statements
-	//getNextToken(tokenizer);
+	current_token = getNextToken();
+	if (current_token->keyword == KeyWords::ELSE)
+	{
+		// parsing body of the while loop
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
+		{
+			std::printf("Unexpected opening to else body. '{' expected at %d.\n", tokenizer->lineNumber());
+			return;
+		}
 
-	//if (tokenizer->keyWord() == KeyWords::ELSE)
-	//{
-	//	// parsing body of the while loop
-	//	getNextToken(tokenizer);
-	//	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '{')
-	//	{
-	//		std::printf("Unexpected opening to while body. '{' expected \n");
-	//		return;
-	//	}
+		compileStatements();
 
-	//	compileStatements();
-
-	//	if (tokenizer->tokenType() != TokenTypes::SYMBOL && tokenizer->symbol() != '}')
-	//	{
-	//		std::printf("Unexpected end to while body. '}' expected \n");
-	//		return;
-	//	}
-	//}
+		current_token = getNextToken();
+		if (current_token->type != TokenTypes::SYMBOL && current_token->str != "}")
+		{
+			std::printf("Unexpected end to else body. '}' expected at %d.\n", tokenizer->lineNumber());
+			return;
+		}
+	}
+	else
+	{
+		tokens_stack.push(current_token);
+	}
 }
 
 
@@ -504,7 +508,7 @@ void JackParser::compileWhile()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "(")
 	{
-		std::printf("Unexpected opening to while. '(' expected \n");
+		std::printf("Unexpected opening to while. '(' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
@@ -513,7 +517,7 @@ void JackParser::compileWhile()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
 	{
-		std::printf("Unexpected end to while. ')' expected \n");
+		std::printf("Unexpected end to while. ')' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
@@ -521,7 +525,7 @@ void JackParser::compileWhile()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
 	{
-		std::printf("Unexpected opening to while body. '{' expected \n");
+		std::printf("Unexpected opening to while body. '{' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
@@ -530,7 +534,7 @@ void JackParser::compileWhile()
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "}")
 	{
-		std::printf("Unexpected end to while body. '}' expected \n");
+		std::printf("Unexpected end to while body. '}' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 }
@@ -590,7 +594,7 @@ void JackParser::compileDo()
 	}
 	else
 	{
-		std::printf("Unexpected syntax for Do statement. 'subroutine name' expected \n");
+		std::printf("Unexpected syntax for Do statement. 'subroutine name' expected at %d.\n", tokenizer->lineNumber());
 	}
 }
 
