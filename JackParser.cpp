@@ -10,6 +10,14 @@ static std::string remove_extension(std::string file_name_with_extension)
 }
 
 
+static void print_map(std::map<std::string,Entry>* _map)
+{
+	for (const auto& pair : *_map) {
+		pair.second.print();
+	}
+}
+
+
 Token* JackParser::getNextToken()
 {
 	Token* ret_ptr = nullptr;
@@ -26,12 +34,13 @@ Token* JackParser::getNextToken()
 	return ret_ptr;
 }
 
+
 JackParser::JackParser(const char* fileName)
 {
 	tokenizer = new JackTokenizer(fileName);
 
 	std::string out_name = remove_extension(fileName);
-	out_name.append("_out.xml");
+	out_name.append("_out.txt");
 	out_file = new std::ofstream (out_name,std::ios::out);
 }
 
@@ -44,6 +53,8 @@ JackParser::~JackParser()
 
 void JackParser::compileClass()
 {
+	class_symbol_table.clear();
+
 	current_token = getNextToken();
 	if (current_token->keyword != KeyWords::CLASS)
 	{
@@ -56,12 +67,17 @@ void JackParser::compileClass()
 		std::printf("Unexpected class definition. class name expected at %d.\n", tokenizer->lineNumber());
 	}
 
+	current_class_name = current_token->str;
+
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
 	{
 		std::printf("Unexpected class definition. { expected at %d.\n", tokenizer->lineNumber());
 	}
 
+	class_static_var_index = 0;
+	class_field_var_index = 0;
+	
 	while (true)
 	{
 		current_token = getNextToken();
@@ -77,6 +93,8 @@ void JackParser::compileClass()
 		break;
 	}
 
+	print_map(&class_symbol_table);
+
 	while (true)
 	{
 		current_token = getNextToken();
@@ -86,6 +104,7 @@ void JackParser::compileClass()
 			//Peek the token
 			tokens_stack.push(current_token);
 			compileSubroutineDec();
+			print_map(&subroutine_symbol_table);
 			continue;
 		}
 		tokens_stack.push(current_token);
@@ -99,15 +118,17 @@ void JackParser::compileClass()
 		return;
 	}
 
-	std::printf("Compilation Success at %d.\n", tokenizer->lineNumber());
+	std::printf("Compilation Success");
 }
 
 
 void JackParser::compileClassVarDec()
 {
+	std::string kind;
+	std::string type;
+
 	current_token = getNextToken();
-	if (current_token->keyword == KeyWords::CONSTRUCTOR || current_token->keyword == KeyWords::FUNCTION
-		|| current_token->keyword == KeyWords::METHOD)
+	if (current_token->keyword != KeyWords::STATIC && current_token->keyword != KeyWords::FIELD)
 	{
 		// we have already peeked at this condition and that's why we are here. 
 		// therefore no need for this condition check.
@@ -115,9 +136,10 @@ void JackParser::compileClassVarDec()
 		tokens_stack.push(current_token);
 	}
 	
-	
-	current_token = getNextToken();
+	// symbol table entry index setup
+	kind = current_token->str;
 
+	current_token = getNextToken();
 	// if the token is for keyword then it has to be type one (boolean | char | int)
 	// or it can be identifier which has to be already declared
 	if ( !((current_token->type == TokenTypes::KEYWORD
@@ -129,6 +151,8 @@ void JackParser::compileClassVarDec()
 		return;
 	}
 
+	type = current_token->str;
+
 	current_token = getNextToken();
 	while (true)
 	{
@@ -137,6 +161,24 @@ void JackParser::compileClassVarDec()
 			std::printf("Unexpected class var declaration. Identifier expected %d\n", tokenizer->lineNumber());
 			return;
 		}
+
+		//set up the class symbol table entry for this variable/s
+		Entry* entry = new Entry();
+		entry->name = current_token->str;
+		entry->type = type;
+		entry->kind = kind;
+		
+		if (current_token->keyword == KeyWords::STATIC)
+		{
+			entry->index = class_static_var_index++;
+		}
+		else
+		{
+			entry->index = class_field_var_index++;
+		}
+
+		//add the entry to the symbol table
+		class_symbol_table.insert(std::pair<std::string,Entry>(entry->name,*entry));
 
 		current_token = getNextToken();
 		if (current_token->str != ",")
@@ -159,6 +201,10 @@ void JackParser::compileClassVarDec()
 
 void JackParser::compileSubroutineDec()
 {
+	subroutine_symbol_table.clear();
+	subroutine_arg_var_index = 0;
+	subroutine_local_var_index = 0;
+
 	current_token = getNextToken();
 	if (current_token->keyword == KeyWords::CONSTRUCTOR || current_token->keyword == KeyWords::FUNCTION
 		|| current_token->keyword == KeyWords::METHOD)
@@ -210,6 +256,9 @@ void JackParser::compileSubroutineDec()
 
 void JackParser::compileParameterList()
 {
+	std::string kind = "argument";
+	std::string type;
+
 	//function parameter list check
 	while (true)
 	{
@@ -223,6 +272,8 @@ void JackParser::compileParameterList()
 			break;
 		}
 
+		type = current_token->str;
+
 		current_token = getNextToken();
 		if (current_token->type != TokenTypes::IDENTIFIER)
 		{
@@ -230,6 +281,17 @@ void JackParser::compileParameterList()
 			tokens_stack.push(current_token);
 			return;
 		}
+
+		// add the argument entry to the symbol table
+		Entry* entry = new Entry();
+		entry->name = current_token->str;
+		entry->type = type;
+		entry->kind = kind;
+		entry->index = subroutine_arg_var_index++;
+	
+		//add the entry to the symbol table
+		subroutine_symbol_table.insert(std::pair<std::string, Entry>(entry->name, *entry));
+
 
 		current_token = getNextToken();
 		if (current_token->type != TokenTypes::SYMBOL || current_token->str != ",")
@@ -256,14 +318,13 @@ void JackParser::compileSubroutineBody()
 	{
 		current_token = getNextToken();
 
-		if (current_token->type != TokenTypes::KEYWORD
-			|| (current_token->keyword != KeyWords::VAR))
+		if (current_token->keyword != KeyWords::VAR)
 		{
 			tokens_stack.push(current_token);
 			break;
 		}
 
-		//line start with "static" or "field"
+		//line start with "var" or "field"
 		compileVarDec();
 	}
 
@@ -281,6 +342,9 @@ void JackParser::compileSubroutineBody()
 
 void JackParser::compileVarDec()
 {
+	std::string kind = "local";
+	std::string type;
+
 	//TODO this code is similar to the code for the class variable parsing. Try to remove it
 	current_token = getNextToken();
 	if (!((current_token->type == TokenTypes::KEYWORD
@@ -293,6 +357,8 @@ void JackParser::compileVarDec()
 		return;
 	}
 
+	type = current_token->str;
+
 	while (true)
 	{
 		current_token = getNextToken();
@@ -302,6 +368,16 @@ void JackParser::compileVarDec()
 			tokens_stack.push(current_token);
 			return;
 		}
+
+		// add the argument entry to the symbol table
+		Entry* entry = new Entry();
+		entry->name = current_token->str;
+		entry->type = type;
+		entry->kind = kind;
+		entry->index = subroutine_local_var_index++;
+
+		//add the entry to the symbol table
+		subroutine_symbol_table.insert(std::pair<std::string, Entry>(entry->name, *entry));
 
 		current_token = getNextToken();
 		if (current_token->type != TokenTypes::SYMBOL || current_token->str != ",")
@@ -432,6 +508,9 @@ void JackParser::compileLet()
 
 void JackParser::compileIf()
 {
+	int temp_lbl1 = ++label_count;
+	int temp_lbl2 = ++label_count;
+
 	current_token = getNextToken();
 	if (current_token->keyword != KeyWords::IF)
 	{
@@ -447,6 +526,9 @@ void JackParser::compileIf()
 
 	compileExpression();
 
+	*out_file << "not \n" << "if goto L" << temp_lbl1 << "\n";
+
+	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
 	{
 		std::printf("Unexpected end to while. ')' expected at %d.\n", tokenizer->lineNumber());
@@ -463,13 +545,16 @@ void JackParser::compileIf()
 
 	compileStatements();
 
+	*out_file << "goto L" << temp_lbl2 << "\n";
+	*out_file << "Label L" << temp_lbl1 << "\n";
+
+	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "}")
 	{
 		std::printf("Unexpected end to while body. '}' expected at %d.\n", tokenizer->lineNumber());
 		return;
 	}
 
-	//TODO else statements
 	current_token = getNextToken();
 	if (current_token->keyword == KeyWords::ELSE)
 	{
@@ -482,6 +567,7 @@ void JackParser::compileIf()
 		}
 
 		compileStatements();
+		*out_file << "Label L" << temp_lbl2 << "\n";
 
 		current_token = getNextToken();
 		if (current_token->type != TokenTypes::SYMBOL && current_token->str != "}")
@@ -499,7 +585,12 @@ void JackParser::compileIf()
 
 void JackParser::compileWhile()
 {
+	int temp_lbl1 = ++label_count;
+	int temp_lbl2 = ++label_count;
 	current_token = getNextToken();
+
+	*out_file << "Label L" << temp_lbl1 << "\n";
+
 	if (current_token->keyword != KeyWords::WHILE)
 	{
 		// this condition is obselete as we have checked it from out side
@@ -513,6 +604,8 @@ void JackParser::compileWhile()
 	}
 
 	compileExpression();
+
+	*out_file << "not \n" << "if goto L" << temp_lbl2 << "\n";
 
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
@@ -530,6 +623,9 @@ void JackParser::compileWhile()
 	}
 
 	compileStatements();
+
+	*out_file << "goto L" << temp_lbl1 << "\n";
+	*out_file << "Label L" << temp_lbl2 << "\n";
 
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "}")
@@ -601,6 +697,12 @@ void JackParser::compileDo()
 
 void JackParser::compileReturn()
 {
+	current_token = getNextToken();
+	if (current_token->keyword != KeyWords::RETURN)
+	{
+		// this condition is obselete as we have checked it from out side
+	}
+
 	compileExpression();
 }
 
@@ -639,7 +741,9 @@ void JackParser::compileExpression()
 				|| current_token->str == "<"
 				|| current_token->str == "="))
 		{
+			std::string code = current_token->str;
 			compileTerm();
+			*out_file << code << "\n";
 		}
 		else
 		{
@@ -652,6 +756,7 @@ void JackParser::compileExpression()
 
 void JackParser::compileTerm()
 {
+	std::string code;
 	current_token = getNextToken();
 	if (current_token->type == TokenTypes::INT_CONST
 		|| current_token->type == TokenTypes::STRING_CONST
@@ -661,10 +766,12 @@ void JackParser::compileTerm()
 					|| current_token->keyword == KeyWords::NULLX
 					|| current_token->keyword == KeyWords::THIS)))
 	{
-		
+		if (current_token->type == TokenTypes::INT_CONST)
+			*out_file << "push " << current_token->str << "\n";
 	}
 	else if (current_token->type == TokenTypes::IDENTIFIER)
 	{
+		code = current_token->str;
 		current_token = getNextToken();
 		if (current_token->type == TokenTypes::SYMBOL && current_token->str == "[")
 		{
@@ -681,7 +788,7 @@ void JackParser::compileTerm()
 		else if (current_token->type == TokenTypes::SYMBOL && current_token->str == "(")
 		{
 			compileExpressionList();
-
+			*out_file << "call " << code << "\n";
 			current_token = getNextToken();
 			if (current_token->type != TokenTypes::SYMBOL && current_token->str != ")")
 			{
@@ -720,6 +827,7 @@ void JackParser::compileTerm()
 		}
 		else
 		{
+			*out_file << "push " << code << "\n";
 			tokens_stack.push(current_token);
 		}
 	}
@@ -737,7 +845,13 @@ void JackParser::compileTerm()
 	else if (current_token->type == TokenTypes::SYMBOL
 		&& (current_token->str == "~" || current_token->str == "-"))
 	{
+		code = current_token->str;
 		compileTerm();
+		*out_file << code << "\n";
+	}
+	else
+	{
+		tokens_stack.push(current_token);
 	}
 }
 

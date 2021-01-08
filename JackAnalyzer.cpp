@@ -2,7 +2,7 @@
 #include "JackTokenizer.h"
 #include "JackParser.h"
 
-const char* FILE_PATH = "F:\\Coursera\\NandToTetris\\nand2tetris\\projects\\temp\\Main_1.jack";
+const char* FILE_PATH = "F:\\Coursera\\NandToTetris\\nand2tetris\\projects\\temp\\Main_3.jack";
 
 void tokenizer_test()
 {

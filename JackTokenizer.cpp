@@ -106,7 +106,7 @@ Token* JackTokenizer::advance()
 
 		do {
 			v = 10 * v + std::atoi(&c);
-            //parsed_value = v;
+            parsed_str = std::to_string(v);
 			chr = input_stream.peek();
 			if (std::isdigit(chr))
 			{
@@ -214,11 +214,11 @@ Token* JackTokenizer::advance()
             }
             else if (compare_string(parsed_str, "if"))
             {
-                token = new Token(TokenTypes::KEYWORD, parsed_str, KeyWords::NULLX);
+                token = new Token(TokenTypes::KEYWORD, parsed_str, KeyWords::IF);
             }
             else if (compare_string(parsed_str, "else"))
             {
-                token = new Token(TokenTypes::KEYWORD, parsed_str, KeyWords::THIS);
+                token = new Token(TokenTypes::KEYWORD, parsed_str, KeyWords::ELSE);
             }
             else if (compare_string(parsed_str, "while"))
             {
@@ -251,115 +251,3 @@ int JackTokenizer::lineNumber()
     return line_number;
 }
 
-//TokenTypes JackTokenizer::tokenType()
-//{
-//    return currenct_token_type;
-//}
-//
-//KeyWords JackTokenizer::keyWord()
-//{
-//    if (compare_string(parsed_str, "class"))
-//    {
-//        return KeyWords::CLASS;
-//    }
-//    else if (compare_string(parsed_str, "constructor"))
-//    {
-//        return KeyWords::CONSTRUCTOR;
-//    }
-//    else if (compare_string(parsed_str, "function"))
-//    {
-//        return KeyWords::FUNCTION;
-//    }
-//    else if (compare_string(parsed_str, "method"))
-//    {
-//        return KeyWords::METHOD;
-//    }
-//    else if (compare_string(parsed_str, "field"))
-//    {
-//        return KeyWords::FIELD;
-//    }
-//    else if (compare_string(parsed_str, "static"))
-//    {
-//        return KeyWords::STATIC;
-//    }
-//    else if (compare_string(parsed_str, "var"))
-//    {
-//        return KeyWords::VAR;
-//    }
-//    else if (compare_string(parsed_str, "int"))
-//    {
-//        return KeyWords::INT;
-//    }
-//    else if (compare_string(parsed_str, "char"))
-//    {
-//        return KeyWords::CHAR;
-//    }
-//    else if (compare_string(parsed_str, "boolean"))
-//    {
-//        return KeyWords::BOOLEAN;
-//    }
-//    else if (compare_string(parsed_str, "void"))
-//    {
-//        return KeyWords::VOID;
-//    }
-//    else if (compare_string(parsed_str, "true"))
-//    {
-//        return KeyWords::TRUE;
-//    }
-//    else if (compare_string(parsed_str, "false"))
-//    {
-//        return KeyWords::FALSE;
-//    }
-//    else if (compare_string(parsed_str, "null"))
-//    {
-//        return KeyWords::NULLX;
-//    }
-//    else if (compare_string(parsed_str, "this"))
-//    {
-//        return KeyWords::THIS;
-//    }
-//    else if (compare_string(parsed_str, "let"))
-//    {
-//        return KeyWords::LET;
-//    }
-//    else if (compare_string(parsed_str, "do"))
-//    {
-//        return KeyWords::DO;
-//    }
-//    else if (compare_string(parsed_str, "if"))
-//    {
-//        return KeyWords::IF;
-//    }
-//    else if (compare_string(parsed_str, "else"))
-//    {
-//        return KeyWords::ELSE;
-//    }
-//    else if (compare_string(parsed_str, "while"))
-//    {
-//        return KeyWords::WHILE;
-//    }
-//    else
-//    {
-//        return KeyWords::RETURN;
-//    }
-//}
-//
-//char JackTokenizer::symbol()
-//{
-//    return parsed_str[0];
-//}
-//
-//std::string JackTokenizer::indentifier()
-//{
-//    return parsed_str;
-//}
-//
-//int JackTokenizer::intVal()
-//{
-//    return parsed_value;
-//}
-//
-//std::string JackTokenizer::stringVal()
-//{
-//    return parsed_str;
-//}
