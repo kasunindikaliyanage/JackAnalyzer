@@ -21,6 +21,9 @@
     <ClInclude Include="JackParser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="JackSymbolTableManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="JackAnalyzer.cpp">
@@ -30,6 +33,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="JackParser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="JackSymbolTableManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

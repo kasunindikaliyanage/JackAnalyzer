@@ -142,10 +142,12 @@
   <ItemGroup>
     <ClInclude Include="JackParser.h" />
     <ClInclude Include="JackTokenizer.h" />
+    <ClInclude Include="JackSymbolTableManager.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="JackAnalyzer.cpp" />
     <ClCompile Include="JackParser.cpp" />
+    <ClCompile Include="JackSymbolTableManager.cpp" />
     <ClCompile Include="JackTokenizer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

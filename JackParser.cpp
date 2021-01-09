@@ -10,14 +10,6 @@ static std::string remove_extension(std::string file_name_with_extension)
 }
 
 
-static void print_map(std::map<std::string,Entry>* _map)
-{
-	for (const auto& pair : *_map) {
-		pair.second.print();
-	}
-}
-
-
 Token* JackParser::getNextToken()
 {
 	Token* ret_ptr = nullptr;
@@ -38,6 +30,7 @@ Token* JackParser::getNextToken()
 JackParser::JackParser(const char* fileName)
 {
 	tokenizer = new JackTokenizer(fileName);
+	symbol_tbl_mgr = new JackSymbolTabelManager();
 
 	std::string out_name = remove_extension(fileName);
 	out_name.append("_out.txt");
@@ -53,7 +46,7 @@ JackParser::~JackParser()
 
 void JackParser::compileClass()
 {
-	class_symbol_table.clear();
+	symbol_tbl_mgr->reset_cls_table();
 
 	current_token = getNextToken();
 	if (current_token->keyword != KeyWords::CLASS)
@@ -67,7 +60,7 @@ void JackParser::compileClass()
 		std::printf("Unexpected class definition. class name expected at %d.\n", tokenizer->lineNumber());
 	}
 
-	current_class_name = current_token->str;
+	symbol_tbl_mgr->set_current_cls(current_token->str.c_str());
 
 	current_token = getNextToken();
 	if (current_token->type != TokenTypes::SYMBOL && current_token->str != "{")
@@ -75,8 +68,7 @@ void JackParser::compileClass()
 		std::printf("Unexpected class definition. { expected at %d.\n", tokenizer->lineNumber());
 	}
 
-	class_static_var_index = 0;
-	class_field_var_index = 0;
+	symbol_tbl_mgr->reset_cls_var_indices();
 	
 	while (true)
 	{
@@ -93,7 +85,7 @@ void JackParser::compileClass()
 		break;
 	}
 
-	print_map(&class_symbol_table);
+	symbol_tbl_mgr->print_cls_table();
 
 	while (true)
 	{
@@ -104,7 +96,8 @@ void JackParser::compileClass()
 			//Peek the token
 			tokens_stack.push(current_token);
 			compileSubroutineDec();
-			print_map(&subroutine_symbol_table);
+			
+			symbol_tbl_mgr->print_subrt_table();
 			continue;
 		}
 		tokens_stack.push(current_token);
@@ -124,7 +117,7 @@ void JackParser::compileClass()
 
 void JackParser::compileClassVarDec()
 {
-	std::string kind;
+	VAR_KIND kind;
 	std::string type;
 
 	current_token = getNextToken();
@@ -137,7 +130,10 @@ void JackParser::compileClassVarDec()
 	}
 	
 	// symbol table entry index setup
-	kind = current_token->str;
+	if (current_token->keyword == KeyWords::STATIC)
+		kind = VAR_KIND::CLS_STATIC;
+	else
+		kind = VAR_KIND::CLS_FIELD;
 
 	current_token = getNextToken();
 	// if the token is for keyword then it has to be type one (boolean | char | int)
@@ -162,23 +158,8 @@ void JackParser::compileClassVarDec()
 			return;
 		}
 
-		//set up the class symbol table entry for this variable/s
-		Entry* entry = new Entry();
-		entry->name = current_token->str;
-		entry->type = type;
-		entry->kind = kind;
-		
-		if (current_token->keyword == KeyWords::STATIC)
-		{
-			entry->index = class_static_var_index++;
-		}
-		else
-		{
-			entry->index = class_field_var_index++;
-		}
-
-		//add the entry to the symbol table
-		class_symbol_table.insert(std::pair<std::string,Entry>(entry->name,*entry));
+		// Add an entry to class symbol table 
+		symbol_tbl_mgr->add_entry_cls_table(current_token->str.c_str(), type.c_str(), kind);
 
 		current_token = getNextToken();
 		if (current_token->str != ",")
@@ -201,9 +182,13 @@ void JackParser::compileClassVarDec()
 
 void JackParser::compileSubroutineDec()
 {
-	subroutine_symbol_table.clear();
-	subroutine_arg_var_index = 0;
-	subroutine_local_var_index = 0;
+	//subroutine_symbol_table.clear();
+	//subroutine_arg_var_index = 0;
+	//subroutine_local_var_index = 0;
+
+	symbol_tbl_mgr->reset_subrt_table();
+	symbol_tbl_mgr->reset_subrt_var_indices();
+
 
 	current_token = getNextToken();
 	if (current_token->keyword == KeyWords::CONSTRUCTOR || current_token->keyword == KeyWords::FUNCTION
@@ -256,7 +241,7 @@ void JackParser::compileSubroutineDec()
 
 void JackParser::compileParameterList()
 {
-	std::string kind = "argument";
+	VAR_KIND kind = VAR_KIND::SUBRT_ARG;
 	std::string type;
 
 	//function parameter list check
@@ -282,16 +267,8 @@ void JackParser::compileParameterList()
 			return;
 		}
 
-		// add the argument entry to the symbol table
-		Entry* entry = new Entry();
-		entry->name = current_token->str;
-		entry->type = type;
-		entry->kind = kind;
-		entry->index = subroutine_arg_var_index++;
-	
-		//add the entry to the symbol table
-		subroutine_symbol_table.insert(std::pair<std::string, Entry>(entry->name, *entry));
-
+		// Add an entry to subroutine symbol table
+		symbol_tbl_mgr->add_entry_subrt_table(current_token->str.c_str(), type.c_str(), kind);
 
 		current_token = getNextToken();
 		if (current_token->type != TokenTypes::SYMBOL || current_token->str != ",")
@@ -342,7 +319,7 @@ void JackParser::compileSubroutineBody()
 
 void JackParser::compileVarDec()
 {
-	std::string kind = "local";
+	VAR_KIND kind = VAR_KIND::SUBRT_LOCAL;
 	std::string type;
 
 	//TODO this code is similar to the code for the class variable parsing. Try to remove it
@@ -369,15 +346,8 @@ void JackParser::compileVarDec()
 			return;
 		}
 
-		// add the argument entry to the symbol table
-		Entry* entry = new Entry();
-		entry->name = current_token->str;
-		entry->type = type;
-		entry->kind = kind;
-		entry->index = subroutine_local_var_index++;
-
-		//add the entry to the symbol table
-		subroutine_symbol_table.insert(std::pair<std::string, Entry>(entry->name, *entry));
+		// Add an entry to subroutine symbol table
+		symbol_tbl_mgr->add_entry_subrt_table(current_token->str.c_str(), type.c_str(), kind);
 
 		current_token = getNextToken();
 		if (current_token->type != TokenTypes::SYMBOL || current_token->str != ",")
